@@ -1,5 +1,9 @@
 #include <OneWire.h>
 #include <Time.h>
+#include <TimeLib.h>
+
+#define TIME_HEADER  "T"   // Header tag for serial time sync message
+#define TIME_REQUEST  7    // ASCII bell character requests a time sync message 
 
 OneWire  ds(10);  // on pin 10 (a 4.7K resistor is necessary)
 byte sensor1[] = {40, 255, 78, 129, 161, 21, 4, 122};
@@ -7,11 +11,48 @@ byte sensor2[] = {40, 255, 110, 94, 161, 21, 3, 154};
 
 void setup(void) {
   Serial.begin(9600);
+  setSyncProvider( requestSync);  //set function to call when sync required
+  discoverOneWireDevices();
 }
 
+void discoverOneWireDevices(void) {
+  byte i;
+  byte present = 0;
+  byte data[12];
+  byte addr[8];
+  
+  Serial.print("Looking for 1-Wire devices...\n\r");
+  while(ds.search(addr)) {
+    Serial.print("\n\rFound \'1-Wire\' device with address:\n\r");
+
+    for( i = 0; i < 8; i++) {
+      Serial.print("0x");
+      if (addr[i] < 16) {
+        Serial.print('0');
+      }
+      Serial.print(addr[i], HEX);
+
+      if (i < 7) {
+        Serial.print(", ");
+
+      }
+    }
+    if ( OneWire::crc8( addr, 7) != addr[7]) {
+        Serial.print("CRC is not valid!\n");
+        return;
+    }
+  }
+  Serial.print("\n\r\n\rThat's it.\r\n");
+  ds.reset_search();
+  return;
+}
+
+void loop2(void){
+  
+}
 void loop(void) {
   digitalClockDisplay();
-  
+
   byte i;
   byte present = 0;
   byte type_s;
@@ -27,46 +68,16 @@ void loop(void) {
     return;
   }
 
-//  if (byte_array_eq(sensor1, addr, 8)) {
-//    Serial.print("Sensor1: ");
-//  } else 
   if (byte_array_eq(sensor2, addr, 8)) {
     Serial.print("Sensor2: ");
   } else {
-    Serial.print("Unknown: ");  
+    Serial.print("Unknown: ");
   }
-  
-//  Serial.print("(");
-//  for ( i = 0; i < 8; i++) {
-//    Serial.write(' ');
-//    Serial.print(addr[i]);
-//  }
-//  Serial.print(") ");
-//
+
   if (OneWire::crc8(addr, 7) != addr[7]) {
     Serial.println("CRC is not valid!");
     return;
   }
-  //  Serial.println();
-
-  // the first ROM byte indicates which chip
-  //  switch (addr[0]) {
-  //    case 0x10:
-  //      Serial.println("  Chip = DS18S20");  // or old DS1820
-  //      type_s = 1;
-  //      break;
-  //    case 0x28:
-  //      Serial.println("  Chip = DS18B20");
-  //      type_s = 0;
-  //      break;
-  //    case 0x22:
-  //      Serial.println("  Chip = DS1822");
-  //      type_s = 0;
-  //      break;
-  //    default:
-  //      Serial.println("Device is not a DS18x20 family device.");
-  //      return;
-  //  }
 
   ds.reset();
   ds.select(addr);
@@ -79,17 +90,9 @@ void loop(void) {
   ds.select(addr);
   ds.write(0xBE);         // Read Scratchpad
 
-  //  Serial.print("  Data = ");
-  //  Serial.print(present, HEX);
-  //  Serial.print(" ");
   for ( i = 0; i < 9; i++) {           // we need 9 bytes
     data[i] = ds.read();
-    //    Serial.print(data[i], HEX);
-    //    Serial.print(" ");
   }
-  //  Serial.print(" CRC=");
-  //  Serial.print(OneWire::crc8(data, 8), HEX);
-  //  Serial.println();
 
   // Convert the data to actual temperature
   // because the result is a 16 bit signed integer, it should
@@ -112,12 +115,7 @@ void loop(void) {
   }
   celsius = (float)raw / 16.0;
   fahrenheit = celsius * 1.8 + 32.0;
-  //  Serial.print("  Temperature = ");
-  //  Serial.print(celsius);
-  //  Serial.print(" Celsius, ");
   Serial.println(fahrenheit);
-  //  Serial.print(" F");
-  //  Serial.println("");
   Serial.flush();
 }
 
@@ -129,7 +127,7 @@ bool byte_array_eq(byte const *x, byte const *y, size_t n)
   return true;
 }
 
-void digitalClockDisplay(){
+void digitalClockDisplay() {
   // digital clock display of the time
   Serial.print(hour());
   printDigits(minute());
@@ -139,14 +137,32 @@ void digitalClockDisplay(){
   Serial.print(" ");
   Serial.print(month());
   Serial.print(" ");
-  Serial.print(year()); 
-  Serial.println(); 
+  Serial.print(year());
+  Serial.println();
 }
 
-void printDigits(int digits){
+void printDigits(int digits) {
   // utility function for digital clock display: prints preceding colon and leading 0
   Serial.print(":");
-  if(digits < 10)
+  if (digits < 10)
     Serial.print('0');
   Serial.print(digits);
+}
+
+void processSyncMessage() {
+//  unsigned long pctime;
+//  const unsigned long DEFAULT_TIME = 1357041600; // Jan 1 2013
+//
+//  if(Serial.find(TIME_HEADER)) {
+//     pctime = Serial.parseInt();
+//     if( pctime >= DEFAULT_TIME) { // check the integer is a valid time (greater than Jan 1 2013)
+//       setTime(pctime); // Sync Arduino clock to the time received on the serial port
+//     }
+//  }
+}
+
+time_t requestSync()
+{
+  Serial.write(TIME_REQUEST);
+  return 0; // the time will be sent later in response to serial mesg
 }
